@@ -1,6 +1,7 @@
 package com.gr8di.lms
 
-
+import com.gr8di.lms.handlers.HealthCheckHandler
+import com.gr8di.lms.handlers.page.HomePageHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -18,8 +19,6 @@ import io.vertx.ext.web.templ.freemarker.FreeMarkerTemplateEngine
 class MainVerticle extends AbstractVerticle {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class)
-    private JDBCClient dbClient
-    private FreeMarkerTemplateEngine templateEngine
 
     private static final String SQL_CREATE_COURSE_TABLE = "CREATE TABLE IF NOT EXISTS course (id INTEGER IDENTITY PRIMARY KEY, name VARCHAR(255) UNIQUE, description CLOB)"
     private static final String SQL_GET_COURSE_BY_ID = "SELECT * FROM course WHERE id = ?"
@@ -36,8 +35,7 @@ class MainVerticle extends AbstractVerticle {
 
     private Future<Void> prepareDatabase() {
         Promise<Void> promise = Promise.promise()
-
-        dbClient = JDBCClient.createShared(vertx, new JsonObject()
+        def dbClient = JDBCClient.createShared(vertx, new JsonObject()
                 .put("url", "jdbc:hsqldb:file:db/gr8lms")
                 .put("driver_class", "org.hsqldb.jdbcDriver")
                 .put("max_pool_size", 30))
@@ -66,21 +64,18 @@ class MainVerticle extends AbstractVerticle {
 
     private Future<Void> startHttpServer() {
         Promise<Void> promise = Promise.promise()
-        HttpServer server = vertx.createHttpServer()
+        def server = vertx.createHttpServer()
+        def templateEngine = FreeMarkerTemplateEngine.create(vertx);
 
-        Router router = Router.router(vertx)
+        def router = Router.router(vertx)
         router.route("/static/*").handler(StaticHandler.create())
-        router.get("/site/home").handler(this.&homeHandler)
-//        router.get("/lms/:course").handler(this.&courseRenderingHandler)
-//        router.post().handler(BodyHandler.create())
-//        router.post("/update").handler(this.&courseUpdateHandler)
-//        router.post("/create").handler(this.&courseCreateHandler)
-//        router.post("/delete").handler(this.&courseDeletionHandler)
 
-        templateEngine = FreeMarkerTemplateEngine.create(vertx);
+        // site endpoint
+        router.mountSubRouter("/site", siteRoutes(templateEngine));
+        // health check endpoint
+        router.get("/health").handler(new HealthCheckHandler())
 
-        server
-                .requestHandler(router)
+        server.requestHandler(router)
                 .listen(8888, { ar ->
                     if (ar.succeeded()) {
                         LOGGER.info("HTTP server running on port 8888")
@@ -94,17 +89,13 @@ class MainVerticle extends AbstractVerticle {
         return promise.future();
     }
 
-    private void homeHandler(RoutingContext context) {
-        context.put("title", "Home")
-        templateEngine.render(context.data(), "templates/site/home.ftl", { ar ->
-            if (ar.succeeded()) {
-                context.response().putHeader("Content-Type", "text/html")
-                context.response().end(ar.result())
-            } else {
-                context.fail(ar.cause())
-            }
-        })
+
+    private Router siteRoutes(def templateEngine) {
+        LOGGER.debug("Mounting '/site' endpoint");
+
+        def router = Router.router(vertx)
+        router.get("/home").handler(new HomePageHandler(templateEngine))
+
+        return router
     }
-
-
 }
