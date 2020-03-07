@@ -28,7 +28,12 @@ dependencies {
     implementation "io.vertx:vertx-core:$vertxVersion"
     implementation "io.vertx:vertx-web:$vertxVersion"
 
+    compile group: 'io.vertx', name: 'vertx-web-templ-freemarker', version: "$vertxVersion"
+    compile group: 'com.github.rjeschke', name: 'txtmark', version: '0.13'
+    compile "io.vertx:vertx-jdbc-client:$vertxVersion"
     compile "io.vertx:vertx-lang-groovy:$vertxVersion"
+    compile group: 'org.hsqldb', name: 'hsqldb', version: '2.5.0'
+    compile group: 'ch.qos.logback', name: 'logback-classic', version: '1.2.3'
 }
 
 processResources {
