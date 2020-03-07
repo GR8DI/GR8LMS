@@ -1,130 +1,40 @@
 package com.gr8di.lms
 
-
+import com.gr8di.lms.database.DatabaseVerticle
+import com.gr8di.lms.gateway.GatewayVerticle
 import io.vertx.core.AbstractVerticle
-import io.vertx.core.Future
+import io.vertx.core.DeploymentOptions
 import io.vertx.core.Promise
-import io.vertx.core.http.HttpServer
-import io.vertx.core.json.JsonObject
 import io.vertx.core.logging.Logger
 import io.vertx.core.logging.LoggerFactory
-import io.vertx.ext.jdbc.JDBCClient
-import io.vertx.ext.sql.SQLConnection
-import io.vertx.ext.web.Router
-import io.vertx.ext.web.RoutingContext
-import io.vertx.ext.web.handler.BodyHandler
-import io.vertx.ext.web.templ.freemarker.FreeMarkerTemplateEngine
 
 class MainVerticle extends AbstractVerticle {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class)
-    private JDBCClient dbClient
-    private FreeMarkerTemplateEngine templateEngine
-
-    private static final String SQL_CREATE_COURSE_TABLE = "CREATE TABLE IF NOT EXISTS course (id INTEGER IDENTITY PRIMARY KEY, name VARCHAR(255) UNIQUE, description CLOB)"
-    private static final String SQL_GET_COURSE_BY_ID = "SELECT * FROM course WHERE id = ?"
-    private static final String SQL_CREATE_COURSE = "INSERT INTO course VALUES (NULL, ?, ?)"
-    private static final String SQL_UPDATE_COURSE = "UPDATE course SET name = ?, description = ? WHERE id = ?"
-    private static final String SQL_GET_ALL_COURSES = "SELECT * FROM course"
-    private static final String SQL_DELETE_COURSE = "DELETE FROM course WHERE id = ?"
 
     @Override
-    public void start(Promise<Void> promise) throws Exception {
-        Future<Void> steps = prepareDatabase().compose({ v -> startHttpServer() })
-        steps.setHandler(promise)
-    }
+    void start(Promise<Void> promise) throws Exception {
+        Promise<String> databaseVerticleDeployment = Promise.promise()
+        vertx.deployVerticle(new DatabaseVerticle(), databaseVerticleDeployment)
 
-    private Future<Void> prepareDatabase() {
-        Promise<Void> promise = Promise.promise()
+        databaseVerticleDeployment.future().compose({ id ->
 
-        dbClient = JDBCClient.createShared(vertx, new JsonObject()
-                .put("url", "jdbc:hsqldb:file:db/gr8lms")
-                .put("driver_class", "org.hsqldb.jdbcDriver")
-                .put("max_pool_size", 30))
+            Promise<String> gatewayVerticleDeployment = Promise.promise()
+            vertx.deployVerticle(
+                    "com.gr8di.lms.gateway.GatewayVerticle",
+                    new DeploymentOptions().setInstances(2),
+                    gatewayVerticleDeployment);
 
-        dbClient.getConnection({ ar ->
-            if (ar.failed()) {
-                LOGGER.error("Could not open a database connection", ar.cause())
+            return gatewayVerticleDeployment.future()
+
+        }).setHandler({ ar ->
+            if (ar.succeeded()) {
+                LOGGER.debug("Verticles deployed successfully")
+                promise.complete()
+            } else {
+                LOGGER.debug("deployment failed" + ar.cause())
                 promise.fail(ar.cause())
-            } else {
-                SQLConnection connection = ar.result()
-                connection.execute(SQL_CREATE_COURSE_TABLE, { create ->
-                    connection.close()
-                    if (create.failed()) {
-                        LOGGER.error("Database preparation error", create.cause())
-                        promise.fail(create.cause())
-                    } else {
-                        promise.complete()
-                    }
-                })
-            }
-        })
-
-        return promise.future()
-    }
-
-
-    private Future<Void> startHttpServer() {
-        Promise<Void> promise = Promise.promise()
-        HttpServer server = vertx.createHttpServer()
-
-        Router router = Router.router(vertx)
-        router.get("/").handler(this.&indexHandler)
-//        router.get("/lms/:course").handler(this.&courseRenderingHandler)
-//        router.post().handler(BodyHandler.create())
-//        router.post("/update").handler(this.&courseUpdateHandler)
-//        router.post("/create").handler(this.&courseCreateHandler)
-//        router.post("/delete").handler(this.&courseDeletionHandler)
-
-        templateEngine = FreeMarkerTemplateEngine.create(vertx);
-
-        server
-                .requestHandler(router)
-                .listen(8888, { ar ->
-                    if (ar.succeeded()) {
-                        LOGGER.info("HTTP server running on port 8888")
-                        promise.complete()
-                    } else {
-                        LOGGER.error("Could not start a HTTP server", ar.cause())
-                        promise.fail(ar.cause())
-                    }
-                });
-
-        return promise.future();
-    }
-
-    private void indexHandler(RoutingContext context) {
-        dbClient.getConnection({ connectionAsyncResult ->
-            if (connectionAsyncResult.succeeded()) {
-                SQLConnection connection = connectionAsyncResult.result()
-                connection.query(SQL_GET_ALL_COURSES, { queryResult ->
-                    connection.close()
-
-                    if (queryResult.succeeded()) {
-
-                        List courseTitles = []
-                        queryResult.result().results.each { json -> courseTitles << json.getString(0)}
-
-                        context.put("title", "All Courses")
-                        context.put("courses", courseTitles)
-                        templateEngine.render(context.data(), "templates/index.ftl", { ar ->
-                            if (ar.succeeded()) {
-                                context.response().putHeader("Content-Type", "text/html")
-                                context.response().end(ar.result())
-                            } else {
-                                context.fail(ar.cause())
-                            }
-                        })
-
-                    } else {
-                        context.fail(queryResult.cause())
-                    }
-                })
-            } else {
-                context.fail(connectionAsyncResult.cause())
             }
         })
     }
-
-
 }
