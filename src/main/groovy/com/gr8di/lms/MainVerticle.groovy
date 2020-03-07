@@ -64,38 +64,8 @@ class MainVerticle extends AbstractVerticle {
 
     private Future<Void> startHttpServer() {
         Promise<Void> promise = Promise.promise()
-        def server = vertx.createHttpServer()
-        def templateEngine = FreeMarkerTemplateEngine.create(vertx);
+        
 
-        def router = Router.router(vertx)
-        router.route("/static/*").handler(StaticHandler.create())
-
-        // site endpoint
-        router.mountSubRouter("/site", siteRoutes(templateEngine));
-        // health check endpoint
-        router.get("/health").handler(new HealthCheckHandler())
-
-        server.requestHandler(router)
-                .listen(8888, { ar ->
-                    if (ar.succeeded()) {
-                        LOGGER.info("HTTP server running on port 8888")
-                        promise.complete()
-                    } else {
-                        LOGGER.error("Could not start a HTTP server", ar.cause())
-                        promise.fail(ar.cause())
-                    }
-                });
-
-        return promise.future();
-    }
-
-
-    private Router siteRoutes(def templateEngine) {
-        LOGGER.debug("Mounting '/site' endpoint");
-
-        def router = Router.router(vertx)
-        router.get("/home").handler(new HomePageHandler(templateEngine))
-
-        return router
+        return promise.future()
     }
 }
