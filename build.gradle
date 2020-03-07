@@ -1,0 +1,44 @@
+plugins {
+    id 'java'
+    id 'groovy'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '5.2.0'
+    id 'io.vertx.vertx-plugin' version '0.0.4'
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url "https://oss.sonatype.org/content/repositories/iovertx-3863/"
+    }
+}
+
+
+ext {
+    vertxVersion = '3.8.5'
+}
+
+sourceCompatibility = '1.8'
+mainClassName = 'io.vertx.core.Launcher'
+
+group = 'com.gr8di.lms'
+version = '1.0.0-SNAPSHOT'
+
+dependencies {
+    implementation "io.vertx:vertx-core:$vertxVersion"
+    implementation "io.vertx:vertx-web:$vertxVersion"
+
+    compile "io.vertx:vertx-lang-groovy:$vertxVersion"
+}
+
+processResources {
+    from 'src/main/groovy'
+}
+
+wrapper {
+    gradleVersion = '6.2.2'
+}
+
+vertx {
+    mainVerticle = 'com.gr8di.lms.MainVerticle'
+}
