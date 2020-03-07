@@ -48,16 +48,17 @@ class DatabaseVerticle extends AbstractVerticle {
         queriesProps.load(queriesInputStream);
         queriesInputStream.close();
 
-        sqlQueries.put(SqlQuery.CREATE_COURSE_TABLE, queriesProps.getProperty("CREATE_COURSE_TABLE"));
-        sqlQueries.put(SqlQuery.GET_ALL_COURSES, queriesProps.getProperty("GET_ALL_COURSES"));
-        sqlQueries.put(SqlQuery.GET_COURSE_BY_ID, queriesProps.getProperty("GET_COURSE_BY_ID"));
-        sqlQueries.put(SqlQuery.CREATE_COURSE, queriesProps.getProperty("CREATE_COURSE"));
-        sqlQueries.put(SqlQuery.UPDATE_COURSE, queriesProps.getProperty("UPDATE_COURSE"));
-        sqlQueries.put(SqlQuery.DELETE_COURSE, queriesProps.getProperty("DELETE_COURSE"));
+        sqlQueries.put(SqlQuery.CREATE_COURSE_TABLE, queriesProps.getProperty("create-course-table"));
+        sqlQueries.put(SqlQuery.GET_ALL_COURSES, queriesProps.getProperty("get-all-courses"));
+        sqlQueries.put(SqlQuery.GET_COURSE_BY_ID, queriesProps.getProperty("get-course-by-id"));
+        sqlQueries.put(SqlQuery.CREATE_COURSE, queriesProps.getProperty("create-course"));
+        sqlQueries.put(SqlQuery.UPDATE_COURSE, queriesProps.getProperty("update-course"));
+        sqlQueries.put(SqlQuery.DELETE_COURSE, queriesProps.getProperty("delete-course"));
     }
 
     @Override
-    public void start(Promise<Void> promise) throws Exception {
+    void start(Promise<Void> promise) throws Exception {
+        LOGGER.debug("deploying database verticle ...")
 
         //TODO: use executeBlocking
         loadSqlQueries()
@@ -66,15 +67,34 @@ class DatabaseVerticle extends AbstractVerticle {
                 .put("url", config().getString(CONFIG_DB_JDBC_URL, "jdbc:hsqldb:file:db/gr8lms"))
                 .put("driver_class", config().getString(CONFIG_DB_JDBC_DRIVER_CLASS, "org.hsqldb.jdbcDriver"))
                 .put("max_pool_size", config().getInteger(CONFIG_DB_JDBC_MAX_POOL_SIZE, 30)))
+
+        dbClient.getConnection({ ar ->
+            if (ar.failed()) {
+                LOGGER.error("Could not open a database connection", ar.cause());
+                promise.fail(ar.cause());
+            } else {
+                SQLConnection connection = ar.result();
+                connection.execute(sqlQueries.get(SqlQuery.CREATE_COURSE_TABLE), { create ->
+                    connection.close();
+                    if (create.failed()) {
+                        LOGGER.error("Database preparation error", create.cause())
+                        promise.fail(create.cause())
+                    } else {
+                        vertx.eventBus().consumer(config().getString(CONFIG_DB_QUEUE, "db.queue"), this.&onMessage)
+                        promise.complete()
+                    }
+                });
+            }
+        });
     }
 
-    public enum ErrorCodes {
+    enum ErrorCodes {
         NO_ACTION_SPECIFIED,
         BAD_ACTION,
         DB_ERROR
     }
 
-    public void onMessage(Message<JsonObject> message) {
+    void onMessage(Message<JsonObject> message) {
 
         if (!message.headers().contains("action")) {
             LOGGER.error("No action header specified for message with headers {} and body {}",

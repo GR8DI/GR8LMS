@@ -22,6 +22,8 @@ class GatewayVerticle extends AbstractVerticle{
     @Override
     public void start(Promise<Void> promise) throws Exception {
 
+        LOGGER.debug("Deploying gatewayverticle")
+
         dbQueue = config().getString(CONFIG_DB_QUEUE, "db.queue")
 
         def server = vertx.createHttpServer()
@@ -43,7 +45,7 @@ class GatewayVerticle extends AbstractVerticle{
         server.requestHandler(router)
                 .listen(8888, { ar ->
                     if (ar.succeeded()) {
-                        LOGGER.info("HTTP server running on port " + portNumber)
+                        LOGGER.debug("HTTP server running on port " + portNumber)
                         promise.complete()
                     } else {
                         LOGGER.error("Could not start a HTTP server", ar.cause())
