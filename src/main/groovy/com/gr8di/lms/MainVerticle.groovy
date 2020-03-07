@@ -1,5 +1,6 @@
 package com.gr8di.lms
 
+
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -13,9 +14,6 @@ import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.templ.freemarker.FreeMarkerTemplateEngine
-
-import java.util.stream.Collectors
-
 
 class MainVerticle extends AbstractVerticle {
 
@@ -70,7 +68,62 @@ class MainVerticle extends AbstractVerticle {
         Promise<Void> promise = Promise.promise()
         HttpServer server = vertx.createHttpServer()
 
+        Router router = Router.router(vertx)
+        router.get("/").handler(this.&indexHandler)
+//        router.get("/lms/:course").handler(this.&courseRenderingHandler)
+//        router.post().handler(BodyHandler.create())
+//        router.post("/update").handler(this.&courseUpdateHandler)
+//        router.post("/create").handler(this.&courseCreateHandler)
+//        router.post("/delete").handler(this.&courseDeletionHandler)
+
+        templateEngine = FreeMarkerTemplateEngine.create(vertx);
+
+        server
+                .requestHandler(router)
+                .listen(8888, { ar ->
+                    if (ar.succeeded()) {
+                        LOGGER.info("HTTP server running on port 8888")
+                        promise.complete()
+                    } else {
+                        LOGGER.error("Could not start a HTTP server", ar.cause())
+                        promise.fail(ar.cause())
+                    }
+                });
+
         return promise.future();
+    }
+
+    private void indexHandler(RoutingContext context) {
+        dbClient.getConnection({ connectionAsyncResult ->
+            if (connectionAsyncResult.succeeded()) {
+                SQLConnection connection = connectionAsyncResult.result()
+                connection.query(SQL_GET_ALL_COURSES, { queryResult ->
+                    connection.close()
+
+                    if (queryResult.succeeded()) {
+
+                        List courseTitles = []
+                        queryResult.result().results.each { json -> courseTitles << json.getString(0)}
+
+                        context.put("title", "All Courses")
+                        context.put("courses", courseTitles)
+                        templateEngine.render(context.data(), "templates/index.ftl", { ar ->
+                            if (ar.succeeded()) {
+                                context.response().putHeader("Content-Type", "text/html")
+                                context.response().end(ar.result())
+                            } else {
+                                context.fail(ar.cause())
+                            }
+                        })
+
+                    } else {
+                        context.fail(queryResult.cause())
+                    }
+                })
+            } else {
+                context.fail(connectionAsyncResult.cause())
+            }
+        })
     }
 
 
