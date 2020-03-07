@@ -12,7 +12,7 @@ import io.vertx.ext.jdbc.JDBCClient
 import io.vertx.ext.sql.SQLConnection
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
-import io.vertx.ext.web.handler.BodyHandler
+import io.vertx.ext.web.handler.StaticHandler
 import io.vertx.ext.web.templ.freemarker.FreeMarkerTemplateEngine
 
 class MainVerticle extends AbstractVerticle {
@@ -69,7 +69,8 @@ class MainVerticle extends AbstractVerticle {
         HttpServer server = vertx.createHttpServer()
 
         Router router = Router.router(vertx)
-        router.get("/").handler(this.&indexHandler)
+        router.route("/static/*").handler(StaticHandler.create())
+        router.get("/site/home").handler(this.&homeHandler)
 //        router.get("/lms/:course").handler(this.&courseRenderingHandler)
 //        router.post().handler(BodyHandler.create())
 //        router.post("/update").handler(this.&courseUpdateHandler)
@@ -93,35 +94,14 @@ class MainVerticle extends AbstractVerticle {
         return promise.future();
     }
 
-    private void indexHandler(RoutingContext context) {
-        dbClient.getConnection({ connectionAsyncResult ->
-            if (connectionAsyncResult.succeeded()) {
-                SQLConnection connection = connectionAsyncResult.result()
-                connection.query(SQL_GET_ALL_COURSES, { queryResult ->
-                    connection.close()
-
-                    if (queryResult.succeeded()) {
-
-                        List courseTitles = []
-                        queryResult.result().results.each { json -> courseTitles << json.getString(0)}
-
-                        context.put("title", "All Courses")
-                        context.put("courses", courseTitles)
-                        templateEngine.render(context.data(), "templates/index.ftl", { ar ->
-                            if (ar.succeeded()) {
-                                context.response().putHeader("Content-Type", "text/html")
-                                context.response().end(ar.result())
-                            } else {
-                                context.fail(ar.cause())
-                            }
-                        })
-
-                    } else {
-                        context.fail(queryResult.cause())
-                    }
-                })
+    private void homeHandler(RoutingContext context) {
+        context.put("title", "Home")
+        templateEngine.render(context.data(), "templates/site/home.ftl", { ar ->
+            if (ar.succeeded()) {
+                context.response().putHeader("Content-Type", "text/html")
+                context.response().end(ar.result())
             } else {
-                context.fail(connectionAsyncResult.cause())
+                context.fail(ar.cause())
             }
         })
     }
