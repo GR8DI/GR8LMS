@@ -28,12 +28,15 @@ class GatewayVerticle extends AbstractVerticle{
         def templateEngine = FreeMarkerTemplateEngine.create(vertx);
 
         def router = Router.router(vertx)
+
+        //serve static assets from webroot folder
         router.route("/static/*").handler(StaticHandler.create())
+
+        // health check endpoint
+        router.get("/health").handler(new HealthCheckHandler())
 
         // site endpoint
         router.mountSubRouter("/site", siteRoutes(templateEngine));
-        // health check endpoint
-        router.get("/health").handler(new HealthCheckHandler())
 
         int portNumber = config().getInteger(CONFIG_HTTP_SERVER_PORT, 8888);
 
